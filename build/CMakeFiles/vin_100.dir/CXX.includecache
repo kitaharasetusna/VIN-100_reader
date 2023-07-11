@@ -159,6 +159,10 @@ iostream
 -
 cassert
 -
+chrono
+-
+thread
+-
 vn/compositedata.h
 /home/bear/Desktop/Github/VIN-100_reader/vn/compositedata.h
 vn/sensors.h

@@ -3,6 +3,8 @@
 using namespace std;
 
 #include <cassert>
+#include <chrono>
+#include <thread>
 
 // Include this header file to get access to VectorNav sensors.
 #include "vn/compositedata.h"
@@ -101,10 +103,12 @@ bool optimize_serial_communication(std::string portName) {
 
   if (portFd == -1) {
     // ROS_WARN("Can't open port for optimization");
+    cout << "Can't open port for optimization" << endl;
     return false;
   }
 
   // ROS_INFO("Set port to ASYNCY_LOW_LATENCY");
+  cout << "\nSet port to ASYNCY_LOW_LATENCY" << endl;
   struct serial_struct serial;
   ioctl(portFd, TIOCGSERIAL, &serial);
   serial.flags |= ASYNC_LOW_LATENCY;
@@ -121,10 +125,101 @@ int main() {
 
   UserData user_data;
 
+  // set parameters
   string sensor_port;
   int sensor_baudrate;
   int async_output_rate;
   int imu_output_rate;
+
+  int sensor_imu_rate;
+
+  user_data.frame_based_enu = "map";
+  user_data.frame_id = "vectormap";
+  user_data.tf_ned_to_enu = false;
+  user_data.frame_based_enu = false;
+  user_data.adjust_ros_timestamp = false;
+  async_output_rate = 40;
+  imu_output_rate = async_output_rate;
+
+  sensor_port = "/dev/ttyUSB0";
+  sensor_baudrate = 115200;
+  sensor_imu_rate = 800;
+
+  // Linear Acceleration Covariances not produced by the sensor
+  boost::array<double, 9ul> linear_accel_covariance = {
+      0.01, 0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.01};
+  // Angular Velocity Covariances not produced by the sensor
+  boost::array<double, 9ul> angular_vel_covariance = {0.01, 0.0, 0.0, 0.0, 0.01,
+                                                      0.0,  0.0, 0.0, 0.01};
+
+  // Orientation covariance overwritten in driver, this is included just
+  // as an extra
+  boost::array<double, 9ul> orientation_covariance = {0.01, 0.0, 0.0, 0.0, 0.01,
+                                                      0.0,  0.0, 0.0, 0.01};
+
+  user_data.linear_accel_covariance = linear_accel_covariance;
+  user_data.angular_vel_covariance = angular_vel_covariance;
+  user_data.orientation_covariance = orientation_covariance;
+
+  cout << "Connecting to : " << sensor_port << " " << sensor_baudrate
+       << " Baud";
+  optimize_serial_communication(sensor_port);
+
+  // Create a VnSensor object and connect to sensor
+  VnSensor vs;
+
+  // Default baudrate variable
+  int defaultBaudrate;
+  // Run through all of the acceptable baud rates until we are connected
+  // Looping in case someone has changed the default
+  bool baudSet = false;
+  // Lets add the set baudrate to the top of the list, so that it will try
+  // to connect with that value first (speed initialization up)
+  std::vector<unsigned int> supportedBaudrates = vs.supportedBaudrates();
+  supportedBaudrates.insert(supportedBaudrates.begin(), sensor_baudrate);
+  while (!baudSet) {
+    // Make this variable only accessible in the while loop
+    static int i = 0;
+    defaultBaudrate = supportedBaudrates[i];
+    cout << "Connecting with default at " << defaultBaudrate << endl;
+    // Default response was too low and retransmit time was too long by default.
+    // They would cause errors
+    vs.setResponseTimeoutMs(1000); // Wait for up to 1000 ms for response
+    vs.setRetransmitDelayMs(50);   // Retransmit every 50 ms
+
+    // Acceptable baud rates 9600, 19200, 38400, 57600, 128000, 115200, 230400,
+    // 460800, 921600 Data sheet says 128000 is a valid baud rate. It doesn't
+    // work with the VN100 so it is excluded. All other values seem to work
+    // fine.
+    try {
+      // Connect to sensor at it's default rate
+      if (defaultBaudrate != 128000 && sensor_baudrate != 128000) {
+        vs.connect(sensor_port, defaultBaudrate);
+        // Issues a change baudrate to the VectorNav sensor and then
+        // reconnects the attached serial port at the new baudrate.
+        vs.changeBaudRate(sensor_baudrate);
+        // Only makes it here once we have the default correct
+        // ROS_INFO("Connected baud rate is %d", vs.baudrate());
+        cout << "Connectefd baud rate is" << vs.baudrate() << endl;
+        baudSet = true;
+      }
+    }
+    // Catch all oddities
+    catch (...) {
+      // Disconnect if we had the wrong default and we were connected
+      vs.disconnect();
+      // Sleep for 0.2 seconds
+      // Sleep for 0.2 seconds
+      std::this_thread::sleep_for(std::chrono::seconds(2));
+    }
+    // Increment the default iterator
+    i++;
+    // There are only 9 available data rates, if no connection
+    // made yet possibly a hardware malfunction?
+    if (i > 8) {
+      break;
+    }
+  }
 
   return 0;
 }
