@@ -1,0 +1,6 @@
+/home/bear/Desktop/Github/VIN-100_reader/build/CMakeFiles/rebuild_cache.dir
+/home/bear/Desktop/Github/VIN-100_reader/build/CMakeFiles/vin_100.dir
+/home/bear/Desktop/Github/VIN-100_reader/build/CMakeFiles/edit_cache.dir
+/home/bear/Desktop/Github/VIN-100_reader/build/vnproglib-1.2.0.0/cpp/CMakeFiles/rebuild_cache.dir
+/home/bear/Desktop/Github/VIN-100_reader/build/vnproglib-1.2.0.0/cpp/CMakeFiles/libvncxx.dir
+/home/bear/Desktop/Github/VIN-100_reader/build/vnproglib-1.2.0.0/cpp/CMakeFiles/edit_cache.dir
