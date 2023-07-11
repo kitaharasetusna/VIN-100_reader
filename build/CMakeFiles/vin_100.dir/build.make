@@ -90,7 +90,12 @@ vin_100_EXTERNAL_OBJECTS =
 
 vin_100: CMakeFiles/vin_100.dir/main.cpp.o
 vin_100: CMakeFiles/vin_100.dir/build.make
+vin_100: /usr/lib/libPocoXML.so.50
 vin_100: vnproglib-1.2.0.0/cpp/liblibvncxx.a
+vin_100: /usr/lib/libPocoFoundation.so.50
+vin_100: /usr/lib/x86_64-linux-gnu/libpcre.so
+vin_100: /usr/lib/x86_64-linux-gnu/libz.so
+vin_100: /usr/lib/x86_64-linux-gnu/libexpat.so
 vin_100: CMakeFiles/vin_100.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/bear/Desktop/Github/VIN-100_reader/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable vin_100"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/vin_100.dir/link.txt --verbose=$(VERBOSE)

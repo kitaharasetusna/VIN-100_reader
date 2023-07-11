@@ -1,1 +1,1 @@
-/usr/bin/c++    -rdynamic CMakeFiles/vin_100.dir/main.cpp.o  -o vin_100 vnproglib-1.2.0.0/cpp/liblibvncxx.a 
+/usr/bin/c++   -UNDEBUG  -rdynamic CMakeFiles/vin_100.dir/main.cpp.o  -o vin_100 /usr/lib/libPocoXML.so.50 vnproglib-1.2.0.0/cpp/liblibvncxx.a /usr/lib/libPocoFoundation.so.50 -lpcre -lz -lpthread -ldl -lrt -lexpat 

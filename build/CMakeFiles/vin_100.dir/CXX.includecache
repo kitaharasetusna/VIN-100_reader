@@ -153,7 +153,11 @@ export.h
 ../vnproglib-1.2.0.0/cpp/include/vn/export.h
 
 /home/bear/Desktop/Github/VIN-100_reader/main.cpp
+boost/array.hpp
+-
 iostream
+-
+cassert
 -
 vn/compositedata.h
 /home/bear/Desktop/Github/VIN-100_reader/vn/compositedata.h
@@ -161,4 +165,26 @@ vn/sensors.h
 /home/bear/Desktop/Github/VIN-100_reader/vn/sensors.h
 vn/util.h
 /home/bear/Desktop/Github/VIN-100_reader/vn/util.h
+Poco/DOM/DOMParser.h
+-
+Poco/DOM/Document.h
+-
+Poco/DOM/Element.h
+-
+Poco/DOM/Node.h
+-
+Poco/DOM/NodeList.h
+-
+Poco/AutoPtr.h
+-
+array
+-
+string
+-
+fcntl.h
+-
+linux/serial.h
+-
+sys/ioctl.h
+-
 
