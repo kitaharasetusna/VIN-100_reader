@@ -1,10 +1,23 @@
 #include <boost/array.hpp>
 #include <iostream>
+#include <string>
 using namespace std;
 
 #include <cassert>
 #include <chrono>
 #include <thread>
+
+void log_warn(const std::string &input) {
+  std::cout << "WARN:" << input << std::endl;
+}
+
+void log_error(const std::string &input) {
+  std::cout << "ERROR:" << input << std::endl;
+}
+
+void log_info(const std::string &input) {
+  std::cout << "INFO:" << input << std::endl;
+}
 
 // Include this header file to get access to VectorNav sensors.
 #include "vn/compositedata.h"
@@ -15,6 +28,9 @@ using namespace vn::math;
 using namespace vn::sensors;
 using namespace vn::protocol::uart;
 using namespace vn::xplat;
+
+// Method declarations for future use.
+void BinaryAsyncMessageReceived(void *userData, Packet &p, size_t index);
 
 // Custom user data to pass to packet callback function
 struct UserData {
@@ -108,7 +124,7 @@ bool optimize_serial_communication(std::string portName) {
   }
 
   // ROS_INFO("Set port to ASYNCY_LOW_LATENCY");
-  cout << "\nSet port to ASYNCY_LOW_LATENCY" << endl;
+  log_info("Set port to ASYNCY_LOW_LATENCY");
   struct serial_struct serial;
   ioctl(portFd, TIOCGSERIAL, &serial);
   serial.flags |= ASYNC_LOW_LATENCY;
@@ -161,8 +177,8 @@ int main() {
   user_data.angular_vel_covariance = angular_vel_covariance;
   user_data.orientation_covariance = orientation_covariance;
 
-  cout << "Connecting to : " << sensor_port << " " << sensor_baudrate
-       << " Baud";
+  log_info("Connecting to: " + sensor_port + " " + to_string(sensor_baudrate) +
+           "Baud");
   optimize_serial_communication(sensor_port);
 
   // Create a VnSensor object and connect to sensor
@@ -181,7 +197,7 @@ int main() {
     // Make this variable only accessible in the while loop
     static int i = 0;
     defaultBaudrate = supportedBaudrates[i];
-    cout << "Connecting with default at " << defaultBaudrate << endl;
+    log_info("Connecting with default at" + to_string(defaultBaudrate));
     // Default response was too low and retransmit time was too long by default.
     // They would cause errors
     vs.setResponseTimeoutMs(1000); // Wait for up to 1000 ms for response
@@ -200,7 +216,7 @@ int main() {
         vs.changeBaudRate(sensor_baudrate);
         // Only makes it here once we have the default correct
         // ROS_INFO("Connected baud rate is %d", vs.baudrate());
-        cout << "Connectefd baud rate is" << vs.baudrate() << endl;
+        log_info("Connectefd baud rate is " + to_string(vs.baudrate()));
         baudSet = true;
       }
     }
@@ -221,5 +237,176 @@ int main() {
     }
   }
 
+  if (vs.verifySensorConnectivity()) {
+    log_info("Device connection established");
+  } else {
+    log_error("ERROR: NO device communication");
+    log_warn("WARN: please input a valid baud rate , Valid are: ");
+    log_warn(
+        "9600, 19200, 38400, 57600, 115200, 128000, 230400, 460800, 921600");
+    log_warn("With the test IMU 128000 did not work, all others worked fine.");
+  }
+
+  // Query the sensor's model number.
+  string mn = vs.readModelNumber();
+  string fv = vs.readFirmwareVersion();
+  uint32_t hv = vs.readHardwareRevision();
+  uint32_t sn = vs.readSerialNumber();
+
+  log_info("Model Number: " + mn + ", Firmware version: " + fv);
+  log_info("Hardware Revision: " + to_string(hv) +
+           ", Serial Number: " + to_string(sn));
+
+  // calculate the least common multiple of the two rate and assure it is a
+  // valid package rate, also calculate the imu and output strides
+  int package_rate = 0;
+  for (int allowed_rate : {1, 2, 4, 5, 10, 20, 25, 40, 50, 100, 200, 0}) {
+    package_rate = allowed_rate;
+    if ((package_rate % async_output_rate) == 0 &&
+        (package_rate % imu_output_rate) == 0)
+      break;
+  }
+  log_info("imu_output_rate: " + to_string(imu_output_rate) +
+           ", async_output_rate: " + to_string(async_output_rate) +
+           ", package_rate: " + to_string(package_rate));
+  // Set the device info for passing to the packet callback function
+  user_data.device_family = vs.determineDeviceFamily();
+
+  // Make sure no generic async output is registered
+  vs.writeAsyncDataOutputType(VNOFF);
+  // Configure binary output message
+  BinaryOutputRegister bor(
+      ASYNCMODE_PORT1,
+      sensor_imu_rate / package_rate, // update rate [ms]
+      COMMONGROUP_QUATERNION | COMMONGROUP_YAWPITCHROLL |
+          COMMONGROUP_ANGULARRATE | COMMONGROUP_POSITION | COMMONGROUP_ACCEL |
+          COMMONGROUP_MAGPRES |
+          (user_data.adjust_ros_timestamp ? COMMONGROUP_TIMESTARTUP : 0),
+      TIMEGROUP_NONE | TIMEGROUP_GPSTOW | TIMEGROUP_GPSWEEK | TIMEGROUP_TIMEUTC,
+      IMUGROUP_NONE, GPSGROUP_NONE,
+      ATTITUDEGROUP_YPRU, //<-- returning yaw pitch roll uncertainties
+      INSGROUP_INSSTATUS | INSGROUP_POSECEF | INSGROUP_VELBODY |
+          INSGROUP_ACCELECEF | INSGROUP_VELNED | INSGROUP_POSU | INSGROUP_VELU,
+      GPSGROUP_NONE);
+
+  // An empty output register for disabling output 2 and 3 if previously set
+  BinaryOutputRegister bor_none(
+      0, 1, COMMONGROUP_NONE, TIMEGROUP_NONE, IMUGROUP_NONE, GPSGROUP_NONE,
+      ATTITUDEGROUP_NONE, INSGROUP_NONE, GPSGROUP_NONE);
+
+  vs.writeBinaryOutput1(bor);
+  vs.writeBinaryOutput2(bor_none);
+  vs.writeBinaryOutput3(bor_none);
+
+  // Register async callback function
+  vs.registerAsyncPacketReceivedHandler(&user_data, BinaryAsyncMessageReceived);
+
+  while (true) {
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+  }
+  // vs.disconnect();
   return 0;
+}
+
+void BinaryAsyncMessageReceived(void *userData, Packet &p, size_t index) {
+  // package counter to calculate strides
+  static unsigned long long pkg_count = 0;
+
+  // evaluate time first, to have it as close to the measurement time as
+  // possible const ros::Time ros_time = ros::Time::now();
+
+  vn::sensors::CompositeData cd = vn::sensors::CompositeData::parse(p);
+  UserData *user_data = static_cast<UserData *>(userData);
+  // ros::Time time = get_time_stamp(cd, user_data, ros_time);
+
+  if (cd.hasQuaternion() && cd.hasAngularRate() && cd.hasAcceleration()) {
+    vec4f q = cd.quaternion();
+    vec3f ar = cd.angularRate();
+    vec3f al = cd.acceleration();
+    log_info("ar[0]: " + to_string(ar[0]));
+    // if (cd.hasAttitudeUncertainty()) {
+    //   vec3f orientationStdDev = cd.attitudeUncertainty();
+    //   msgIMU.orientation_covariance[0] =
+    //       pow(orientationStdDev[2] * M_PI / 180, 2); // Convert to radians
+    //       Roll
+    //   msgIMU.orientation_covariance[4] =
+    //       pow(orientationStdDev[1] * M_PI / 180, 2); // Convert to radians
+    //       Pitch
+    //   msgIMU.orientation_covariance[8] =
+    //       pow(orientationStdDev[0] * M_PI / 180, 2); // Convert to radians
+    //       Yaw
+    // }
+
+    // // Quaternion message comes in as a Yaw (z) pitch (y) Roll (x) format
+    // if (user_data->tf_ned_to_enu) {
+    //   // If we want the orientation to be based on the reference label on the
+    //   // imu
+    //   tf2::Quaternion tf2_quat(q[0], q[1], q[2], q[3]);
+    //   geometry_msgs::Quaternion quat_msg;
+
+    //   if (user_data->frame_based_enu) {
+    //     // Create a rotation from NED -> ENU
+    //     tf2::Quaternion q_rotate;
+    //     q_rotate.setRPY(M_PI, 0.0, M_PI / 2);
+    //     // Apply the NED to ENU rotation such that the coordinate frame
+    //     matches tf2_quat = q_rotate * tf2_quat; quat_msg =
+    //     tf2::toMsg(tf2_quat);
+
+    //     // Since everything is in the normal frame, no flipping required
+    //     msgIMU.angular_velocity.x = ar[0];
+    //     msgIMU.angular_velocity.y = ar[1];
+    //     msgIMU.angular_velocity.z = ar[2];
+
+    //     msgIMU.linear_acceleration.x = al[0];
+    //     msgIMU.linear_acceleration.y = al[1];
+    //     msgIMU.linear_acceleration.z = al[2];
+    //   } else {
+    //     // put into ENU - swap X/Y, invert Z
+    //     quat_msg.x = q[1];
+    //     quat_msg.y = q[0];
+    //     quat_msg.z = -q[2];
+    //     quat_msg.w = q[3];
+
+    //     // Flip x and y then invert z
+    //     msgIMU.angular_velocity.x = ar[1];
+    //     msgIMU.angular_velocity.y = ar[0];
+    //     msgIMU.angular_velocity.z = -ar[2];
+    //     // Flip x and y then invert z
+    //     msgIMU.linear_acceleration.x = al[1];
+    //     msgIMU.linear_acceleration.y = al[0];
+    //     msgIMU.linear_acceleration.z = -al[2];
+
+    //     if (cd.hasAttitudeUncertainty()) {
+    //       vec3f orientationStdDev = cd.attitudeUncertainty();
+    //       msgIMU.orientation_covariance[0] = pow(
+    //           orientationStdDev[1] * M_PI / 180, 2); // Convert to radians
+    //           pitch
+    //       msgIMU.orientation_covariance[4] = pow(
+    //           orientationStdDev[0] * M_PI / 180, 2); // Convert to radians
+    //           Roll
+    //       msgIMU.orientation_covariance[8] = pow(
+    //           orientationStdDev[2] * M_PI / 180, 2); // Convert to radians
+    //           Yaw
+    //     }
+    //   }
+
+    //   msgIMU.orientation = quat_msg;
+    // } else {
+    //   float orientation_x = q[0];
+    //   float orientation_y = q[1];
+    //   float orientation_z = q[2];
+    //   float orientation_w = q[3];
+
+    //   float angular_velocity_x = ar[0];
+    //   float angular_velocity_y = ar[1];
+    //   float angular_velocity_z = ar[2];
+    //   float linear_acceleration_x = al[0];
+    //   float linear_acceleration_y = al[1];
+    //   float linear_acceleration_z = al[2];
+    // }
+    // // Covariances pulled from parameters
+    // log_info(to_string(ar[0]));
+  }
+
+  pkg_count += 1;
 }
