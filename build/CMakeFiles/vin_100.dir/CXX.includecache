@@ -157,6 +157,8 @@ boost/array.hpp
 -
 iostream
 -
+sstream
+-
 string
 -
 cassert

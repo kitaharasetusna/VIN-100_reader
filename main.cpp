@@ -1,5 +1,6 @@
 #include <boost/array.hpp>
 #include <iostream>
+#include <sstream>
 #include <string>
 using namespace std;
 
@@ -17,6 +18,16 @@ void log_error(const std::string &input) {
 
 void log_info(const std::string &input) {
   std::cout << "INFO:" << input << std::endl;
+}
+
+std::string arrayToString(const boost::array<double, 9ul> &inputArray) {
+  std::ostringstream oss;
+  oss << "[";
+  for (const auto &element : inputArray) {
+    oss << " " << element << ",";
+  }
+  oss << "]";
+  return oss.str();
 }
 
 // Include this header file to get access to VectorNav sensors.
@@ -311,7 +322,8 @@ int main() {
 void BinaryAsyncMessageReceived(void *userData, Packet &p, size_t index) {
   // package counter to calculate strides
   static unsigned long long pkg_count = 0;
-
+  string log_str = "";
+  log_str += "this is pkg no. " + to_string(pkg_count);
   // evaluate time first, to have it as close to the measurement time as
   // possible const ros::Time ros_time = ros::Time::now();
 
@@ -323,89 +335,121 @@ void BinaryAsyncMessageReceived(void *userData, Packet &p, size_t index) {
     vec4f q = cd.quaternion();
     vec3f ar = cd.angularRate();
     vec3f al = cd.acceleration();
-    log_info("ar[0]: " + to_string(ar[0]));
-    // if (cd.hasAttitudeUncertainty()) {
-    //   vec3f orientationStdDev = cd.attitudeUncertainty();
-    //   msgIMU.orientation_covariance[0] =
-    //       pow(orientationStdDev[2] * M_PI / 180, 2); // Convert to radians
-    //       Roll
-    //   msgIMU.orientation_covariance[4] =
-    //       pow(orientationStdDev[1] * M_PI / 180, 2); // Convert to radians
-    //       Pitch
-    //   msgIMU.orientation_covariance[8] =
-    //       pow(orientationStdDev[0] * M_PI / 180, 2); // Convert to radians
-    //       Yaw
-    // }
+    // log_info("q: " + to_string(q[0]) + " " + to_string(q[1]) + " " +
+    //          to_string(q[2]));
+    // log_info("ar: " + to_string(ar[0]) + " " + to_string(ar[1]) + " " +
+    //          to_string(ar[2]));
+    // log_info("al: " + to_string(al[0]) + " " + to_string(al[1]) + " " +
+    //          to_string(al[2]));
 
-    // // Quaternion message comes in as a Yaw (z) pitch (y) Roll (x) format
-    // if (user_data->tf_ned_to_enu) {
-    //   // If we want the orientation to be based on the reference label on the
-    //   // imu
-    //   tf2::Quaternion tf2_quat(q[0], q[1], q[2], q[3]);
-    //   geometry_msgs::Quaternion quat_msg;
+    if (cd.hasAttitudeUncertainty()) {
+      vec3f orientationStdDev = cd.attitudeUncertainty();
+      user_data->orientation_covariance[0] =
+          pow(orientationStdDev[2] * M_PI / 180, 2); // Convert to radians Roll
+      user_data->orientation_covariance[4] =
+          pow(orientationStdDev[1] * M_PI / 180, 2); // Convert to radians Pitch
+      user_data->orientation_covariance[8] =
+          pow(orientationStdDev[0] * M_PI / 180, 2); // Convert to radians Yaw
+      // log_info(to_string(user_data->orientation_covariance[0]) + " " +
+      //          to_string(user_data->orientation_covariance[4]) + " " +
+      //          to_string(user_data->orientation_covariance[8]));
+    }
 
-    //   if (user_data->frame_based_enu) {
-    //     // Create a rotation from NED -> ENU
-    //     tf2::Quaternion q_rotate;
-    //     q_rotate.setRPY(M_PI, 0.0, M_PI / 2);
-    //     // Apply the NED to ENU rotation such that the coordinate frame
-    //     matches tf2_quat = q_rotate * tf2_quat; quat_msg =
-    //     tf2::toMsg(tf2_quat);
+    // TODO:
+    // add quan in first condition
+    if (user_data->tf_ned_to_enu) {
+      // // If we want the orientation to be based on the reference label on the
+      // // imu
+      // tf2::Quaternion tf2_quat(q[0], q[1], q[2], q[3]);
+      // geometry_msgs::Quaternion quat_msg;
 
-    //     // Since everything is in the normal frame, no flipping required
-    //     msgIMU.angular_velocity.x = ar[0];
-    //     msgIMU.angular_velocity.y = ar[1];
-    //     msgIMU.angular_velocity.z = ar[2];
+      // if (user_data->frame_based_enu) {
+      //   // Create a rotation from NED -> ENU
+      //   tf2::Quaternion q_rotate;
+      //   q_rotate.setRPY(M_PI, 0.0, M_PI / 2);
+      //   // Apply the NED to ENU rotation such that the coordinate frame
+      //   matches tf2_quat = q_rotate * tf2_quat; quat_msg =
+      //   tf2::toMsg(tf2_quat);
 
-    //     msgIMU.linear_acceleration.x = al[0];
-    //     msgIMU.linear_acceleration.y = al[1];
-    //     msgIMU.linear_acceleration.z = al[2];
-    //   } else {
-    //     // put into ENU - swap X/Y, invert Z
-    //     quat_msg.x = q[1];
-    //     quat_msg.y = q[0];
-    //     quat_msg.z = -q[2];
-    //     quat_msg.w = q[3];
+      //   // Since everything is in the normal frame, no flipping required
+      //   msgIMU.angular_velocity.x = ar[0];
+      //   msgIMU.angular_velocity.y = ar[1];
+      //   msgIMU.angular_velocity.z = ar[2];
 
-    //     // Flip x and y then invert z
-    //     msgIMU.angular_velocity.x = ar[1];
-    //     msgIMU.angular_velocity.y = ar[0];
-    //     msgIMU.angular_velocity.z = -ar[2];
-    //     // Flip x and y then invert z
-    //     msgIMU.linear_acceleration.x = al[1];
-    //     msgIMU.linear_acceleration.y = al[0];
-    //     msgIMU.linear_acceleration.z = -al[2];
+      //   msgIMU.linear_acceleration.x = al[0];
+      //   msgIMU.linear_acceleration.y = al[1];
+      //   msgIMU.linear_acceleration.z = al[2];
+      // } else {
+      //   // put into ENU - swap X/Y, invert Z
+      //   quat_msg.x = q[1];
+      //   quat_msg.y = q[0];
+      //   quat_msg.z = -q[2];
+      //   quat_msg.w = q[3];
 
-    //     if (cd.hasAttitudeUncertainty()) {
-    //       vec3f orientationStdDev = cd.attitudeUncertainty();
-    //       msgIMU.orientation_covariance[0] = pow(
-    //           orientationStdDev[1] * M_PI / 180, 2); // Convert to radians
-    //           pitch
-    //       msgIMU.orientation_covariance[4] = pow(
-    //           orientationStdDev[0] * M_PI / 180, 2); // Convert to radians
-    //           Roll
-    //       msgIMU.orientation_covariance[8] = pow(
-    //           orientationStdDev[2] * M_PI / 180, 2); // Convert to radians
-    //           Yaw
-    //     }
-    //   }
+      //   // Flip x and y then invert z
+      //   msgIMU.angular_velocity.x = ar[1];
+      //   msgIMU.angular_velocity.y = ar[0];
+      //   msgIMU.angular_velocity.z = -ar[2];
+      //   // Flip x and y then invert z
+      //   msgIMU.linear_acceleration.x = al[1];
+      //   msgIMU.linear_acceleration.y = al[0];
+      //   msgIMU.linear_acceleration.z = -al[2];
 
-    //   msgIMU.orientation = quat_msg;
-    // } else {
-    //   float orientation_x = q[0];
-    //   float orientation_y = q[1];
-    //   float orientation_z = q[2];
-    //   float orientation_w = q[3];
+      //   if (cd.hasAttitudeUncertainty()) {
+      //     vec3f orientationStdDev = cd.attitudeUncertainty();
+      //     msgIMU.orientation_covariance[0] = pow(
+      //         orientationStdDev[1] * M_PI / 180, 2); // Convert to radians
+      //         pitch
+      //     msgIMU.orientation_covariance[4] = pow(
+      //         orientationStdDev[0] * M_PI / 180, 2); // Convert to radians
+      //         Roll
+      //     msgIMU.orientation_covariance[8] = pow(
+      //         orientationStdDev[2] * M_PI / 180, 2); // Convert to radians
+      //         Yaw
+      //   }
+      // }
 
-    //   float angular_velocity_x = ar[0];
-    //   float angular_velocity_y = ar[1];
-    //   float angular_velocity_z = ar[2];
-    //   float linear_acceleration_x = al[0];
-    //   float linear_acceleration_y = al[1];
-    //   float linear_acceleration_z = al[2];
-    // }
-    // // Covariances pulled from parameters
-    // log_info(to_string(ar[0]));
+      // msgIMU.orientation = quat_msg;
+    } else {
+      float orientation_x = q[0];
+      float orientation_y = q[1];
+      float orientation_z = q[2];
+      float orientation_w = q[3];
+
+      float angular_velocity_x = ar[0];
+      float angular_velocity_y = ar[1];
+      float angular_velocity_z = ar[2];
+      float linear_acceleration_x = al[0];
+      float linear_acceleration_y = al[1];
+      float linear_acceleration_z = al[2];
+      // log_info(to_string(orientation_x) + " " + to_string(orientation_y) +
+      //          to_string(orientation_z) + to_string(orientation_w));
+      // log_info("\n orientation:\n x: " + to_string(orientation_x) + "\n" +
+      //          " y: " + to_string(orientation_y) +
+      //          "\n z: " + to_string(orientation_z));
+      log_str += "\n orientation:\n x: " + to_string(orientation_x) + "\n" +
+                 " y: " + to_string(orientation_y) +
+                 "\n z: " + to_string(orientation_z);
+      log_str += "\n orientation_covariance: " +
+                 arrayToString(user_data->orientation_covariance);
+      log_str += "\n angular_velocity:\n x: " + to_string(angular_velocity_x) +
+                 "\n" + " y: " + to_string(angular_velocity_y) +
+                 "\n z: " + to_string(angular_velocity_z);
+      log_str += "\n angular_acceleration_covariance: " +
+                 arrayToString(user_data->angular_vel_covariance);
+      log_str +=
+          "\n linear_acceleration:\n x: " + to_string(linear_acceleration_x) +
+          "\n" + " y: " + to_string(linear_acceleration_y) +
+          "\n z: " + to_string(linear_acceleration_z);
+      log_str += "\n linear_acceleration_covariance: " +
+                 arrayToString(user_data->linear_accel_covariance);
+    }
+    // TODO:
+    // Covariances pulled from parameters
+    // msgIMU.angular_velocity_covariance = user_data->angular_vel_covariance;
+    // msgIMU.linear_acceleration_covariance =
+    // user_data->linear_accel_covariance;
+    log_info(log_str);
   }
 
   pkg_count += 1;
